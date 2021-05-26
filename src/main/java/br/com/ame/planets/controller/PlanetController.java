@@ -7,9 +7,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
+import javax.annotation.PostConstruct;
 import javax.ws.rs.QueryParam;
 import java.util.List;
 import java.util.UUID;
@@ -22,18 +25,7 @@ public class PlanetController {
     @Autowired
     private PlanetService _planetService;
 
-    @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/")
-    public Mono<Planet> createPlanet(@RequestBody PlanetDto planetDto) {
-        try {
-            var savePlanet = _planetService.save(planetDto);
-            return savePlanet;
-        } catch (Exception e) {
-            throw e;
-        }
-
-    }
-
+   
     @GetMapping("/")
     public Flux<Planet> getAllPlanets() {
         try {
@@ -45,12 +37,12 @@ public class PlanetController {
     }
 
     @GetMapping("/name")
-    public Mono<ResponseEntity<Planet>> getPlanetByName(@RequestParam("name") String name) {
+    public Flux<Planet> getPlanetByName(@RequestParam("name") String name) {
 
         try {
 
-            Mono<Planet> planet = _planetService.findByNome(name);
-            return planet.map(p -> ResponseEntity.ok(p)).defaultIfEmpty(ResponseEntity.notFound().build());
+            Flux<Planet> planet = _planetService.findByNome(name);
+         return planet;
 
         } catch (Exception ex) {
             throw ex;
@@ -78,6 +70,11 @@ public class PlanetController {
             throw e;
         }
 
+    }
+
+
+    private String nameToSearch(String[] name) {
+        return name[0];
     }
 
 }

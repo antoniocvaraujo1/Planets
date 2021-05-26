@@ -7,8 +7,10 @@ import br.com.ame.planets.repository.PlanetRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,31 +28,31 @@ public class PlanetServiceImpl implements PlanetService {
     @Autowired
     private PlanetAdapter _planetAdapter;
 
-    @Override
-    public Mono<Planet> save(PlanetDto planetDto) {
 
-        Planet planet =_planetAdapter.convertToEntity(planetDto);
-        return _planetRepository.save(planet);
+    public Disposable parallelSave(Planet onNext) {
+        return Flux.just(onNext)
+                .parallel()
+                .runOn(Schedulers.elastic())
+                .flatMap(_planetRepository::save)
+                .subscribe();
     }
 
-    @Override
-    public Mono<Planet> save(Planet planet) {
-
-        return _planetRepository.save(planet);
+    public Mono<Void> errorLog(Throwable e) {
+        //application log
+        return Mono.empty();
     }
 
+    public Flux<Planet> emptyReturn(Throwable e) {
+        return errorLog(e).thenMany(Mono.empty());
+    }
+
+
     @Override
-    public Mono<Planet> findByNome(String name) {
+    public Flux<Planet> findByNome(String name) {
 
-        Mono<Planet> planet;
+        return _planetRepository.findByNome(name)
+                .onErrorResume(this::emptyReturn);
 
-        planet = _planetRepository.findByNome(name);
-
-        if (!planet.blockOptional().isPresent()) {
-            planet = _starwarsService.findByName(name);
-        }
-
-        return planet;
     }
 
     @Override

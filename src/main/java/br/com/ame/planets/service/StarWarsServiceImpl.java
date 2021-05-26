@@ -2,19 +2,21 @@ package br.com.ame.planets.service;
 
 import br.com.ame.planets.adpter.PlanetAdapter;
 import br.com.ame.planets.entity.Planet;
+import br.com.ame.planets.response.PlanetResponse;
 import br.com.ame.planets.response.ResultsResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import javax.annotation.PostConstruct;
 import java.util.HashMap;
 
 @Service
 public class StarWarsServiceImpl implements StarWarsService {
-
-    @Autowired
-    private HttpClientService _httpClientService;
 
     @Autowired
     PlanetService _planetService;
@@ -22,22 +24,45 @@ public class StarWarsServiceImpl implements StarWarsService {
     @Autowired
     PlanetAdapter _planetAdapter;
 
+    private WebClient webClient;
+
     @Value("${starwars.base.url}")
     public String apiBaseUrl;
 
-    public Mono<Planet> findByName(String name) {
+    @Value("${starwars.planet.url}")
+    public String planetUrl;
+
+    @PostConstruct
+    private void init() {
+
+        this.webClient = WebClient.create(apiBaseUrl);
+    }
+
+
+    public Flux<Planet> findByName(String name) {
 
         var parameters = new HashMap<String, String>();
         parameters.put("search", name);
 
-        ResultsResponse result = (ResultsResponse) _httpClientService.getRequest(apiBaseUrl + "planets/", parameters, ResultsResponse.class);
+        var result = webClient.get()
+                .uri(builder -> builder.path(planetUrl).queryParam("search", name).build())
+                .exchange()
+                .flatMapMany(this::bodyToFlux);
 
-        if (result.count == 1) {
-            Planet planet = _planetAdapter.convertToEntity(result.getResults().get(0));
-            return _planetService.save(planet);
-        }
+        var fluxresult = result.map(ResultsResponse::getResults).flatMap(Flux::fromIterable);
 
-        return null;
+            Planet planet = _planetAdapter.convertToEntity(fluxresult);
+
+            _planetService.parallelSave(planet);
+
+            Flux<Planet> planetFlux = Flux.just(planet);
+
+        return planetFlux;
+    }
+
+    private Flux<ResultsResponse> bodyToFlux(ClientResponse a) {
+
+        return a.bodyToFlux(ResultsResponse.class);
     }
 
 }
